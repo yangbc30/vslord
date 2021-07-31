@@ -68,10 +68,15 @@ class Player:
     def action(self, gamestate):
         """
         gamestate - instance of GameState : 当前游戏状态
-        玩家根据当前游戏状态结合玩家的策略进行决策，返回一个instance of Cards 表示玩家打出的牌
-        打出的牌是否合法另行判断
+        玩家根据当前游戏状态结合玩家的策略进行决策，返回一个instance of Action表示玩家想要做出一个操作
         """
-        return self.strategy(gamestate)
+        while True:
+            action = eval(self.strategy(gamestate))
+            if action.is_valid() == True:
+                action.effect()  # 这个操作对gamestate的影响
+                action.display()  # 这个操作显示在屏幕上
+                action.sync()  # 把这个操作同步给其他玩家
+
 
 
 
