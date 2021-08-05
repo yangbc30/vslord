@@ -11,6 +11,7 @@
 
 class Action:
 
+
     def __init__(self, player, gamestate):
         Action.player = player
         Action.gamestate = gamestate

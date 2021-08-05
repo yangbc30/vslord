@@ -3,52 +3,35 @@ from vslord_rules import *
 from vslord_strategies import *
 from vslord_gui import *
 
+def look_up_room(player):
+    player.connection.send_to_server("look_up_room")
+    print(player.connection.receive_from_server())
 
+def start_new_room(player):
+    room_name = input("the name of room you want to start")
+    player.connection.send_to_server("start_new_room: room_owner = %s, room_name = %s" % (player.name, room_name))
+
+def join_room(player):
+    room_name = input("the name of room you want to join")
+    player.connection.send_to_server("join_room: player = %s, room_name = %s" % (player.name, room_name))
 
 ########
 # Main #
 ########
 
-# 主程序
-def play(gamestate):
-    """
-    上家出完牌后下一个人开始出牌
-    判断出的牌是否合法
-    判断是否胜利
-    出牌后修改gamestate
-    """
-    pass  # ToDo
-
-
 
 ###########
 # Example #
 ###########
+connection = Connection("65.49.192.141", 28716)
+local_player = Player("yangbc")
+local_player.connection = connection
+local_player.login()
+
+start_new_room(local_player)
+
+#   room = Room("doudizhu", local_player, local_player, Vslord)
+#   room.add_player("yuanye")
+#   room.add_player("lvyaqiao")
 
 
-
-# 创建玩家
-player0 = Player(Cards(), strategy_0)
-player1 = Player(Cards(), strategy_1)
-player2 = Player(Cards(), strategy_1)
-
-# 开始游戏
-gamestate = GameState([player0, player1, player2], player0, Vslord_Rule)
-
-
-# 玩家开始操作 要同时执行
-player0.action(gamestate)
-player1.action(gamestate)
-player2.action(gamestate)
-"""
-# 开始渲染
-gui(gamestate)
-
-# 发牌等
-gamestate.rule.preparation()
-
-# 打牌
-while True:
-    play(gamestate)
-    
-"""
