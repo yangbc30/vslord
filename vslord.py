@@ -23,9 +23,9 @@ def join_room(player):
 ###########
 # Example #
 ###########
+
+local_player = Player("yangbc", "password")
 connection = Connection("65.49.192.141", 28716)
-local_player = Player("yangbc")
-local_player.connection = connection
 local_player.login()
 
 start_new_room(local_player)

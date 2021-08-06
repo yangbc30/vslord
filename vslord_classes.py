@@ -22,11 +22,11 @@ class Connection:
         """
         self.playerSocket.send(message.encode())
 
-    def receive_from_server(self):
+    def receive_from_server(self, bufsize=1024):
         """
         接收服务器字符串
         """
-        return self.playerSocket.recv(1024).decode()
+        return self.playerSocket.recv(bufsize).decode()
 
 
 class Room:
@@ -50,10 +50,6 @@ class Room:
 
     def start_game(self):
         GameState(self.players, self.local_player, self.rule).simulate()
-        # for player in self.players:
-        #    player.action(gamestate)
-        #    player.obey(gamestate)
-        #    异步执行
 
 
 class Card:
@@ -107,20 +103,21 @@ class Player:
     玩家可以出牌
     """
 
-    def __init__(self, name, strategy=interactive_strategy, connection=None):
+    def __init__(self, username, password=None, strategy=interactive_strategy):
         """
         cards - instance of Cards : 玩家手上握的牌
         strategy - function : 对应玩家的策略
         """
-        self.connection = connection
         self.cards = None
-        self.name = name
+        self.name = username
+        self.password = password
         self.connection = None
         self.strategy = strategy
 
+
     def login(self):
-        password = input("your password :")
-        self.connection.send_to_server("password: %s" % password)
+
+        self.connection.send_to_server("password: %s" % self.password)
         # ToDo 完善验证密码协议
 
     def action(self, gamestate):
