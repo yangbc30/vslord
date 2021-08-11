@@ -7,28 +7,6 @@ from socket import *
 ###########
 
 
-class Connection:
-
-    def __init__(self, serverName, serverPort):
-        """
-        创建tcp链接
-        """
-        self.playerSocket = socket(AF_INET, SOCK_STREAM)
-        self.playerSocket.connect((serverName, serverPort))
-
-    def send_to_server(self, message):
-        """
-        发送表示action的字符串到服务器
-        """
-        self.playerSocket.send(message.encode())
-
-    def receive_from_server(self, bufsize=1024):
-        """
-        接收服务器字符串
-        """
-        return self.playerSocket.recv(bufsize).decode()
-
-
 class Room:
     """
 
@@ -103,22 +81,17 @@ class Player:
     玩家可以出牌
     """
 
-    def __init__(self, username, password=None, strategy=interactive_strategy):
+    def __init__(self, username, strategy=interactive_strategy):
         """
         cards - instance of Cards : 玩家手上握的牌
         strategy - function : 对应玩家的策略
         """
         self.cards = None
         self.name = username
-        self.password = password
+
         self.connection = None
         self.strategy = strategy
 
-
-    def login(self):
-
-        self.connection.send_to_server("password: %s" % self.password)
-        # ToDo 完善验证密码协议
 
     def action(self, gamestate):
         """
