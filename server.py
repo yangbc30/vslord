@@ -164,22 +164,22 @@ class Node(Thread):
         """根据run中不断获取的客户端信息，服务器端进行反馈
 
         """
-        request = info_list[0]
+        action = info_list[0]
 
-        if request == 'login':
+        if action == 'login':
             username = info_list[1]
             password = info_list[2]
 
             query_result = self.sql("SELECT password FROM user WHERE username = '{}';".format(username))
 
             if query_result == []:
-                msg = [request, "error", "user_not_found"]
+                msg = [action, "error", "user_not_found"]
                 self.send(msg)
                 self.socket.close()
             else:
                 password_queried = query_result[0][0]
                 if password == password_queried:
-                    msg = [request, "ok"]
+                    msg = [action, "ok"]
                     self.send(msg)
                     # 登录成功
                     self.username = username  # 将username存入Node类中
@@ -189,11 +189,11 @@ class Node(Thread):
                     self.server.lock.release()
                     # 将client加入clients字典中，多线程共享
                 else:
-                    msg = [request, "error", "password_not_correct"]
+                    msg = [action, "error", "password_not_correct"]
                     self.send(msg)
                     self.socket.close()
 
-        if request == "register":
+        if action == "register":
             progress = info_list[1]
 
             if progress == "step_1":
@@ -202,30 +202,30 @@ class Node(Thread):
                     reciever_box))  # 如果在数据库中已经存在这个邮箱（self.sql 返回一个非空list），提示客户端邮箱已注册
                 if isinstance(query_result, list):
                     if len(query_result) != 0:
-                        msg = [request, progress, "error", "mail_box_used"]
+                        msg = [action, progress, "error", "mail_box_used"]
                         self.send(msg)
                     else:
                         true_or_false, code_or_error = self.send_mail(reciever_box, self.nickname)
                         if true_or_false is True:
-                            msg = [request, progress, "continue"]
+                            msg = [action, progress, "continue"]
                             self.send(msg)
                             self.code = code_or_error  # 将验证码进行记录，下一次客户端发送验证码时进行比对
                             self.mail_box = reciever_box  # 将邮箱进行记录，如果第二部验证码正确，录入注册信息
 
                         else:
-                            msg = [request, progress, "error", code_or_error]
+                            msg = [action, progress, "error", code_or_error]
                             self.send(msg)
                 else:
-                    msg = [request, progress, "error", query_result]
+                    msg = [action, progress, "error", query_result]
                     self.send(msg)
 
             elif progress == "step_2":
                 code = info_list[2]
                 if code == self.code:
-                    msg = [request, progress, "continue"]
+                    msg = [action, progress, "continue"]
                     self.send(msg)
                 else:
-                    msg = [request, progress, "error", "wrong_code"]
+                    msg = [action, progress, "error", "wrong_code"]
                     self.send(msg)
             elif progress == "step_3":
                 username = info_list[2]
@@ -234,7 +234,7 @@ class Node(Thread):
                 self.sql("INSERT INTO user(username, password, mailbox ) VALUES ('{}', '{}', '{}');".format(username,
                                                                                                             password,
                                                                                                             self.mail_box))
-                msg = [request, progress, "ok"]
+                msg = [action, progress, "ok"]
                 self.send(msg)
 
 
