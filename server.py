@@ -3,61 +3,60 @@ from threading import *
 import sqlite3
 # import os
 # import sys
-import time
 import random
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
+from utils import *
 
 
 class Server:
     """
     服务器，通过端口创建，接受到tcp请求创建client，并且接受client的请求
     """
-    debug = True
     clients = {}
     threads = {}
 
     def __init__(self, maxClient=3, server_addr=('127.0.0.1', 10001)):
         self.server_addr = server_addr
         self.maxClient = maxClient
-        self.serverSocket = socket()
-        self.serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-        self.serverSocket.bind(self.server_addr)
         self.lock = Lock()
-
-    def get_time(self):
-        return '[' + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) + ']'
+        try:
+            self.serverSocket = socket()
+            self.serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+            self.serverSocket.bind(self.server_addr)
+        except Exception as error:
+            print_by_time(error)
 
     def start(self):
         self.serverSocket.listen(self.maxClient)
-        print(self.get_time(), '系统等待连接')
+        if GLOBAL_DEBUG is True:
+            print_by_time("系统等待连接")
         while True:
-
             conn, addr = self.serverSocket.accept()
 
             t = Node(conn, self)
             t.start()
             self.threads[conn] = t
             for c in self.threads:
-                if c._closed is True:
+                if c._closed is True:  # thread._closed 是啥 TODO
                     self.threads[c].join()
 
 
 class Node(Thread):
     """Sever中接受了客户端的一个tcp连接请求，建立tcp连接，对于服务器，将客户端抽象为一个节点，分配一个线程处理这个节点发出的信息
     """
-    debug = True
     sender_mailbox = "201870105@smail.nju.edu.cn"
     sender_nickname = "Game Vslord"
     sender_password = "Yangbc30"
     mail_title = "Verify your email for Vslord"
     nickname = "Player"
     database = "user.db"
+    state = {}  # 表示对应用户当前的状态 如{"login":"ok"}
 
     username = None
     password = None
-    mail_box = None
+    mailbox = None
     code = None
 
     def __init__(self, conn, server):
@@ -65,20 +64,18 @@ class Node(Thread):
         self.socket = conn
         self.server = server
 
-    def get_time(self):
-        return '[' + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) + ']'
-
-    def send(self, msg):
-        if self.debug is True:
-            print(self.get_time() + "send to client: " + " ".join(msg))
-        msg = ",".join(msg)
+    def send(self, msg_list):  # send 不需要异常处理，因为如果对方端口关闭，会自动给我发送['']此时recv的异常处理使端口关闭
+        if GLOBAL_DEBUG is True:
+            print_by_time("send to client: " + " ".join(msg_list))
+        msg = ",".join(msg_list)
         self.socket.send(msg.encode('utf-8'))
+        self.state[msg_list[0]] = msg_list[1]  # 保存状态
 
-    def recv(self):
+    def recv(self):  # 异常交给Node.run处理
         recv_msg = self.socket.recv(1024).decode('utf-8').strip()
         info_list = recv_msg.split(',')
-        if self.debug is True:
-            print(self.get_time() + "recieve from client: ", " ".join(info_list))
+        if GLOBAL_DEBUG is True:
+            print_by_time("recieve from client: " + " ".join(info_list))
         return info_list
 
     def sql(self, command):
@@ -86,7 +83,7 @@ class Node(Thread):
 
         修改成功 -> 返回True
         查询成功 -> 返回查询结果 形式为一个列表，每个元素都是元组，每个元组代表一行结果 [('yangbc',), ('yuanye',), ('lvyaqiao',)]
-        失败 -> 返回相应错误的字符串
+        失败 -> 打印相应错误的字符串
         >>> node = Node(socket(), Server())
 
         >>> node.sql("SELECT sender_password FROM user;")
@@ -107,7 +104,8 @@ class Node(Thread):
                 return cursor.fetchall()  #
 
         except sqlite3.Error as error:
-            return str(error)
+            print_by_time(str(error))
+            return False  # TODO 引用方异常处理
         finally:
             cursor.close()
             db.commit()
@@ -134,6 +132,7 @@ class Node(Thread):
                 server.sendmail(self.sender_mailbox, [reciever_mailbox], msg.as_string())
 
         except Exception as error:
+            print_by_time(error)
             return False, str(error)  # 如果smtp报错，将报错发回
         else:
             return True, code  # 无异常，表示邮件发送成功，返回验证码，给do_request进行比对
@@ -142,19 +141,16 @@ class Node(Thread):
         """Node 继承Thread类，继承Thread的类自动调用run方法
         """
 
-        class NetworkError(Exception):  # 为了格式统一，定义一个异常
-            pass
-
         while True:
             try:
                 info_list = self.recv()
                 if info_list == ['']:  # 如果说服务器端套间字不断收到['']，说明客户端已经断开连接，这时通信中止，服务器端也应当关闭套间字
                     raise NetworkError
-            except OSError:
-                print("服务器端断开连接")
+            except OSError as error:
+                print_by_time("服务器端断开连接" + str(error))
                 return
-            except NetworkError:
-                print("客户端断开连接")
+            except NetworkError as error:
+                print_by_time("客户端断开连接" + str(error))
                 self.socket.close()
                 return
 
@@ -166,7 +162,7 @@ class Node(Thread):
         """
         action = info_list[0]
 
-        if action == 'login':
+        if action == "login":
             username = info_list[1]
             password = info_list[2]
 
@@ -193,48 +189,55 @@ class Node(Thread):
                     self.send(msg)
                     self.socket.close()
 
-        if action == "register":
-            progress = info_list[1]
+        if action == "register_step_1":
 
-            if progress == "step_1":
-                reciever_box = info_list[2]  # 根据协议解析box
-                query_result = self.sql("SELECT * FROM user WHERE mailbox = '{}';".format(
-                    reciever_box))  # 如果在数据库中已经存在这个邮箱（self.sql 返回一个非空list），提示客户端邮箱已注册
-                if isinstance(query_result, list):
-                    if len(query_result) != 0:
-                        msg = [action, progress, "error", "mail_box_used"]
+            username = info_list[1]
+            password = info_list[2]
+            query_result = self.sql("SELECT username FROM user WHERE username = '{}';".format(username))
+            if query_result == []:  # username 唯一，合法，保存数据
+                self.username = username
+                self.password = password
+                msg = [action, "ok"]
+                self.send(msg)
+            else:  # username 不唯一，不合法，发送错误代码
+                msg = [action, "error", "username_used"]
+                self.send(msg)
+
+        if action == "register_step_2":
+            reciever_box = info_list[1]  # 根据协议解析box
+            query_result = self.sql("SELECT * FROM user WHERE mailbox = '{}';".format(
+                reciever_box))  # 如果在数据库中已经存在这个邮箱（self.sql 返回一个非空list），提示客户端邮箱已注册
+            if isinstance(query_result, list):
+                if len(query_result) != 0:
+                    msg = [action, "error", "mailbox_used"]
+                    self.send(msg)
+                else:
+                    true_or_false, code_or_error = self.send_mail(reciever_box, self.nickname)
+                    if true_or_false is True:
+                        msg = [action, "ok"]
                         self.send(msg)
+                        self.code = code_or_error  # 将验证码进行记录，下一次客户端发送验证码时进行比对
+                        self.mailbox = reciever_box  # 将邮箱进行记录，如果第二部验证码正确，录入注册信息
+
                     else:
-                        true_or_false, code_or_error = self.send_mail(reciever_box, self.nickname)
-                        if true_or_false is True:
-                            msg = [action, progress, "continue"]
-                            self.send(msg)
-                            self.code = code_or_error  # 将验证码进行记录，下一次客户端发送验证码时进行比对
-                            self.mail_box = reciever_box  # 将邮箱进行记录，如果第二部验证码正确，录入注册信息
+                        msg = [action, "error", "cannot_send_mail", code_or_error]  # SMTP 发生错误
+                        self.send(msg)
+            else:
+                msg = [action, "error", "sql_error", query_result]
+                self.send(msg)
 
-                        else:
-                            msg = [action, progress, "error", code_or_error]
-                            self.send(msg)
-                else:
-                    msg = [action, progress, "error", query_result]
-                    self.send(msg)
-
-            elif progress == "step_2":
-                code = info_list[2]
-                if code == self.code:
-                    msg = [action, progress, "continue"]
-                    self.send(msg)
-                else:
-                    msg = [action, progress, "error", "wrong_code"]
-                    self.send(msg)
-            elif progress == "step_3":
-                username = info_list[2]
-                password = info_list[3]
-
-                self.sql("INSERT INTO user(username, password, mailbox ) VALUES ('{}', '{}', '{}');".format(username,
-                                                                                                            password,
-                                                                                                            self.mail_box))
-                msg = [action, progress, "ok"]
+        if action == "register_step_3":
+            code = info_list[1]
+            if code == self.code:
+                msg = [action, "ok"]
+                self.state["login"] = "ok"  # 验证码填写正确的同时就登录上了
+                self.send(msg)
+                assert self.sql(
+                    "INSERT INTO user(username, password, mailbox ) VALUES ('{}', '{}', '{}');".format(self.username,
+                                                                                                       self.password,
+                                                                                                       self.mailbox)), "sql insert error"
+            else:
+                msg = [action, "error", "wrong_code"]
                 self.send(msg)
 
 
