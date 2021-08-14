@@ -1,8 +1,6 @@
 from socket import *
 from threading import *
 import sqlite3
-# import os
-# import sys
 import random
 import smtplib
 from email.mime.text import MIMEText
@@ -20,7 +18,7 @@ class Server:
     def __init__(self, maxClient=3, server_addr=('127.0.0.1', 10001)):
         self.server_addr = server_addr
         self.maxClient = maxClient
-        self.lock = Lock()
+        self.lock = Lock()  # TODO 多线程修改数据用线程锁
         try:
             self.serverSocket = socket()
             self.serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
@@ -82,7 +80,9 @@ class Node(Thread):
         """传入符合规范的sql命令字符串记得最后加分号命令全部大写，然后修改/或查询结果
 
         修改成功 -> 返回True
+
         查询成功 -> 返回查询结果 形式为一个列表，每个元素都是元组，每个元组代表一行结果 [('yangbc',), ('yuanye',), ('lvyaqiao',)]
+
         失败 -> 打印相应错误的字符串
         >>> node = Node(socket(), Server())
 
@@ -101,7 +101,7 @@ class Node(Thread):
             cursor.execute(command)
 
             if command.lstrip().startswith("SELECT"):
-                return cursor.fetchall()  #
+                return cursor.fetchall()
 
         except sqlite3.Error as error:
             print_by_time(str(error))
@@ -135,7 +135,7 @@ class Node(Thread):
             print_by_time(error)
             return False, str(error)  # 如果smtp报错，将报错发回
         else:
-            return True, code  # 无异常，表示邮件发送成功，返回验证码，给do_request进行比对
+            return True, code  # 无异常，表示邮件发送成功，返回验证码，给process_msg处理
 
     def run(self):
         """Node 继承Thread类，继承Thread的类自动调用run方法
@@ -176,8 +176,7 @@ class Node(Thread):
                 password_queried = query_result[0][0]
                 if password == password_queried:
                     msg = [action, "ok"]
-                    self.send(msg)
-                    # 登录成功
+                    self.send(msg)  # 登录成功
                     self.username = username  # 将username存入Node类中
 
                     self.server.lock.acquire()
@@ -217,7 +216,7 @@ class Node(Thread):
                         msg = [action, "ok"]
                         self.send(msg)
                         self.code = code_or_error  # 将验证码进行记录，下一次客户端发送验证码时进行比对
-                        self.mailbox = reciever_box  # 将邮箱进行记录，如果第二部验证码正确，录入注册信息
+                        self.mailbox = reciever_box  # 将邮箱进行记录，如果register_step_3验证码比对正确，录入注册信息
 
                     else:
                         msg = [action, "error", "cannot_send_mail", code_or_error]  # SMTP 发生错误

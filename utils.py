@@ -10,6 +10,10 @@ def get_time():
 
 
 def print_by_time(msg):
+    """将信息以[时间] + []
+
+    :param msg: 一切有str方法的对象
+    """
     print(get_time() + str(msg))
 
 
