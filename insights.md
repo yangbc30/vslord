@@ -48,3 +48,11 @@ Client.send()异常处理
 
 client编程思路：一个gui写一个class，class中同时实现gui使用的方法，若有必要，给方法分配线程，client在连接成功后就分配一个线程一直监听。
 
+gui面向对象编程，Card，Cards，
+
+server判断输赢，用修饰器
+
+gui与底层数据分离		
+
+每个object在创建时就有自己的主人(每个object都是由自己的主人创建的, object的转移在主人处有具体的方法, 转移的时候重新display, display是把所有属于这个主人的object进行展示)
+

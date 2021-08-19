@@ -13,13 +13,15 @@ class Client:
     mailbox = None  # 当用户登录成功，注册成功时，对应的ui会记录用户用户名、密码、和邮箱（因为一个ui完成对应的任务后会自动销毁）
     threads = {}  # 保存线程，暂时无用
     recv_msg = {}  # 保存recv方法得到的消息，以action作为关键字 {"login": ["login", "error", "user_not_found"]}
+    msg_to_obey = []  # 保存等待遵守的action [["give_cards_to", "force", "yangbc", "Cards"], ...]
     is_connected = False  # 记录当前是否已经连上服务器
     state = {}  # 记录收到消息中所有action的状态 {"register_step_1": "ok", ...}
+    player_info = {}  # 记录所有玩家信息 {"yuanye": {...}}
 
     def __init__(self, server_addr=("127.0.0.1", 10001)):
         self.server_addr = server_addr  # 调试用端口（即本机的10001端口）端口冲突自行修改
 
-    def connect(self):
+    def connect(self):  # TODO 断线重连
         """负责与服务器的连接，连接成功则返回True则分出线程监听socket，连接失败则返回False交给引用方处理
         """
         self.socket = socket(AF_INET, SOCK_STREAM)
@@ -32,7 +34,7 @@ class Client:
             return False
         t = Thread(target=self.save_msg)  # 分出线程监听socket
         t.start()
-        self.threads["listen"] = t  # 将进程记录 TODO 后续进程多了，进程管理
+        self.threads["listen"] = t  # 将进程记录 TODO 后续线程多了，线程管理
         self.is_connected = True
         return True
 
@@ -62,28 +64,34 @@ class Client:
                 print_by_time(error)
                 return
             else:
-                self.recv_msg[info_list[0]] = info_list  # 保存来自服务器的消息
-                self.state[info_list[0]] = info_list[1]  # 根据消息提取出action的state，进行保存
+                if info_list[1] == "obey":
+                    LOCK.acquire()
+                    self.msg_to_obey.append(info_list)  # TODO 假定同时只有一个
+                    LOCK.release()
+                else:
+                    self.recv_msg[info_list[0]] = info_list  # 保存来自服务器的消息
+                    self.state[info_list[0]] = info_list[1]  # 根据消息提取出action的state，进行保存
 
-    def wait_msg(self, key_word, timeout=5, step=0.05):
-        """ 等待处理程序需要的消息的出现
+    def wait_msg(self, action, timeout=5, step=0.05):
+        """ 等待处理程序需要的消息(给定action或state的消息)的出现
 
         快速扫描 recv_msg
         如果在规定的时间内找到了需要的action对应的info_list返回
         如果美哟在规定的时间内找到，抛出异常
 
-        :param key_word: 你需要的action
+        :param action: 你需要的action
         :param timeout: 等待时间，超时抛出异常
         :param step: 扫描间隔
         :return: 你想要的 info_list
         """
-        ddl = time.time() + timeout
+        ddl = time.time() + timeout  # TODO 同一个action不会有多个消息，但是同一个state可能有多个消息
+
         while time.time() < ddl:
-            if key_word in self.recv_msg:
-                return self.recv_msg[key_word]
+            if action in self.recv_msg:
+                return self.recv_msg[action]
             else:
                 time.sleep(step)
-        raise NetworkError("接受服务器消息超时(花费{}s)".format(timeout))  # 超时引发异常
+        raise NetworkError("等待服务器消息超时(花费{}s)".format(timeout))  # 超时引发异常
 
     def send(self, msg):
         """发送给定格式的信息到服务器端
@@ -144,7 +152,7 @@ class Login(Frame):
         msg = [action, username, password]
         CLIENT.send(msg)
         try:
-            info_list = CLIENT.wait_msg(key_word=action)
+            info_list = CLIENT.wait_msg(action=action)
         except NetworkError as error:
             print_by_time(error)
             messagebox.showerror(message=str(error), title="连接超时")
@@ -162,39 +170,52 @@ class Login(Frame):
                     print_by_time(info_list[2])
                 messagebox.showerror(message=info_list[2], title="login error")  # 所有服务器端来的 error 代码都用messagebox处理
 
-    def check_username(self, username):
+    @staticmethod
+    def check_username(username):
         """在客户端判断用户名是否符合基本规范
 
         如果合适返回True，否则提示错误信息，返回False交给引用方处理
         6~18位字符，只能包含英文字母，数字，下划线。
-        """
-        ok = True
-        length = len(username)
-        if length > 18 or length < 6:
-            ok = False
-        for i in username:
-            if not (i.isdigit() or i.isalpha() or i == '_'):
-                ok = False
-        if ok is False:
-            messagebox.showerror(title="用户名错误", message="用户名为6~18位字符，只能包含英文字母，数字，下划线")
-        return ok
 
-    def check_password(self, password):
+        >>> Login.check_username("yandgggsdbc_30")
+        True
+        >>> Login.check_username("yangbbbbc")
+        True
+        >>> Login.check_username("111111111111111134434343434334")
+        False
+        >>> Login.check_username("YANGBC30")
+        True
+        """
+
+        ret = re.match(r"^[a-zA-Z0-9_]{6,18}$", username)
+        if ret:
+            return True
+        else:
+            messagebox.showerror(title="用户名错误", message="用户名为6~18位字符，只能包含英文字母，数字，下划线")
+            return False
+
+    @staticmethod
+    def check_password(password):
         """在客户端判断密码是否符合基本规范
 
         如果合适返回True，否则提示错误信息，返回False交给引用方处理
         6~18位字符，只能包含英文字母，数字。
+
+        >>> Login.check_password("yandgggsdbc_30")
+        False
+        >>> Login.check_password("yangbbbbc")
+        True
+        >>> Login.check_password("111111111111111134434343434334")
+        False
+        >>> Login.check_password("YANGBC30")
+        True
         """
-        ok = True
-        length = len(password)
-        if length > 18 or length < 6:
-            ok = False
-        for i in password:
-            if not (i.isdigit() or i.isalpha()):
-                ok = False
-        if ok is False:
+        ret = re.match(r"^[a-zA-Z0-9]{6,18}$", password)
+        if ret:
+            return True
+        else:
             messagebox.showerror(title="密码错误", message="密码为6~18位字符，只能包含英文字母，数字")
-        return ok
+            return False
 
     def register_step_1(self):
         if CLIENT.is_connected is False:  # 同 login 开头
@@ -258,14 +279,12 @@ class Register(Frame):
         self.button_1.grid(row=1, column=2)
         self.button_2.grid(row=2, column=1)
 
-    def check_mailbox(self, mailbox):
+    @staticmethod
+    def check_mailbox(mailbox):
         """合法返回True，非法messagebox提示，返回False
-
-        >>> root = Tk()
-        >>> register = Register(master=root)
-        >>> register.check_mailbox("2414836228@qq.com")
+        >>> Register.check_mailbox("2414836228@qq.com")
         True
-        >>> register.check_mailbox("baidu.com")
+        >>> Register.check_mailbox("baidu.com")
         False
         """
         pattern = r'^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$'
@@ -284,7 +303,7 @@ class Register(Frame):
             msg = [action, mailbox]
             CLIENT.send(msg)
             try:
-                info_list = CLIENT.wait_msg(key_word=action)
+                info_list = CLIENT.wait_msg(action=action)
             except NetworkError as error:
                 print_by_time(error)
                 messagebox.showerror(message=str(error), title="连接超时")
@@ -315,7 +334,7 @@ class Register(Frame):
         msg = [action, code]
         CLIENT.send(msg)
         try:
-            info_list = CLIENT.wait_msg(key_word=action)
+            info_list = CLIENT.wait_msg(action=action)
         except NetworkError as error:
             print_by_time(error)
             messagebox.showerror(message=str(error), title="连接超时")
@@ -333,11 +352,12 @@ class Register(Frame):
                 return  # 返回mainloop 重试
 
 
+CLIENT = Client()  # 创建一个client对象，负责处理底层数据传输和状态记录，为全局变量
+
 if __name__ == '__main__':
     LOCK = Lock()  # 线程锁 全局变量 多线程修改数据用 TODO 加入线程锁
     ROOT = Tk()  # 根界面 全局变量
     # ROOT.geometry("400x300")
     ROOT.title("登录")
-    CLIENT = Client()  # 创建一个client对象，负责处理底层数据传输和状态记录，为全局变量
     login_ui = Login(master=ROOT)  # 默认创建登录界面
     ROOT.mainloop()  # 开始实践循环，捕获event
