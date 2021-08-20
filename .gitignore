@@ -2,5 +2,6 @@ venv/
 .idea
 LICENSE
 test.db
+test.py
 __*
 ~*
