@@ -5,7 +5,10 @@ import random
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
+
+import private
 from utils import *
+from private import *
 
 
 class Server:
@@ -44,9 +47,9 @@ class Server:
 class Node(Thread):
     """Sever中接受了客户端的一个tcp连接请求，建立tcp连接，对于服务器，将客户端抽象为一个节点，分配一个线程处理这个节点发出的信息
     """
-    sender_mailbox = "201870105@smail.nju.edu.cn"
+    sender_mailbox = private.MAILBOX
+    sender_password = private.PASSWORD
     sender_nickname = "Game Vslord"
-    sender_password = "Yangbc30"
     mail_title = "Verify your email for Vslord"
     nickname = "Player"
     database = "user.db"

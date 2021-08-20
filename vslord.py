@@ -1,20 +1,21 @@
-from client import Client, LOCK
-from threading import Thread
+from client import Client
+from threading import *
 from tkinter import *
 
 # 测试环境
-
+LOCK = Lock()
 CLIENT = Client()
 CLIENT.username = "yangbc"
 CLIENT.password = "yangbc"
 CLIENT.mailbox = "2414836228@qq.com"
-CLIENT.connect()
 CLIENT.state["login"] = "ok"
 CLIENT.player_info = {
     "yangbc": {"points": 1000},
     "yuanye": {"points": 1000},
     "lvyaqiao": {"points": 1000},
 }
+
+
 
 print("ok")
 
@@ -24,13 +25,14 @@ print("ok")
 ###########
 
 class MyWidget:
-    _display = False
+    _master = None
     _owner = None
+    _display = False
 
     def __init__(self, owner=None, *args, **kwargs):
-        self.appearance = None
-        self.subordinate = []
+        self.attachment = []
         self.owner = owner
+        self.appearance = None
 
     @property
     def owner(self):
@@ -38,39 +40,50 @@ class MyWidget:
 
     @owner.setter
     def owner(self, value):
-        assert isinstance(self.owner, MyWidget)
         if isinstance(self.owner, MyWidget):  # 如果前主人继承我的组件类（其中含有subordinate这个lst）把我在前主人的lst中删去
-            self.owner.subordinate.remove(self)
+            self.owner.attachment.remove(self)
         self._owner = value  # 修改owner
-        if isinstance(self.owner, MyWidget) and self.display:
-            self.master = self.owner.appearance  # 换master
-            self.owner.subordinate.append(self)
-            assert isinstance(self.appearance, Widget)  # 改变本身widget的master
-            self.appearance["master"] = self.master
-            self.display = self.display
+        if isinstance(self.owner, MyWidget):  # 重建从属关系，最后重新显示，显示的时候根据从属关系，建一个appr得到atta的master
+            self.owner.attachment.append(self)
+            if self._display:
+                self.display()
         else:
             self.master = None
 
     @property
-    def display(self):
-        return self._display
+    def master(self):
+        return self._master
 
-    @display.setter
-    def display(self, value):
-        assert value in [True, False], "set incorrect value for display"
-        self._display = value
-        if value == True:
-            for widget in self.subordinate:
-                widget.display = True  # 将self所有的附属组件展示出来
-            if self.display:
-                self.init_display()
+    @master.setter
+    def master(self, value):
+        self._master = value
+
+    def _set_master(self):
+        if isinstance(self, GameState):
+            self.master = None
+        elif isinstance(self, MyWidget):
+            self.master = self.owner.appearance
         else:
-            self.appearance.pack_forget()
-            self.appearance.grid_forget()
-            self.appearance.place_forget()
+            print("set master error")
 
-    def init_display(self):
+    def display(self):
+        self._set_master()
+        self.set_appr()
+        for widget in self.attachment:
+            widget.display()
+        self.place_atta()
+        self._display = True
+
+    def set_appr(self):  # 附属的外貌在init中已经创建，但是需要创建本身的外貌
         pass
+
+    def place_atta(self):  # 一个组件可以摆放附属的位置
+        pass
+
+    def forget(self):  # 将一个组件隐藏
+        self.appearance.pack_forget()
+        self.appearance.grid_forget()
+        self.appearance.place_forget()
 
     def pack(self, *args, **kwargs):
         assert isinstance(self.appearance, Widget), "self.appearance 不是一个tkinter的widget"
@@ -84,14 +97,15 @@ class MyWidget:
         assert isinstance(self.appearance, Widget), "self.appearance 不是一个tkinter的widget"
         self.appearance.place(*args, **kwargs)
 
+    def config(self, *args, **kwargs):
+        assert isinstance(self.appearance, Widget)
+        self.appearance.config(*args, **kwargs)
+
     def __add__(self, other):
         pass
 
 
-class Timer:
-
-    def __init__(self, owner):
-        self.owner = owner
+class Timer(MyWidget):
 
     def display(self):
         pass
@@ -104,15 +118,20 @@ class Card(MyWidget):
         super(Card, self).__init__(*args, **kwargs)
         self.point, self.color = feature
 
-    def init_display(self):
+    def set_appr(self):
         img = PhotoImage(file="imgs/cards/{}.gif".format(self.point))
-        self.appearance = Label(image=img)
+        self.appearance = Label(master=self.master, image=img)
+        self.appearance.image = img
+        # self.appearance = Label(master=self.master, text="11 ")
+
+    def place_atta(self):
+        pass
 
     def __str__(self):
         point_to_str = {None: "未知", 1: "A", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10",
                         11: "J", 12: "Q", 13: "K", 14: "小猴", 15: "大猴"}
         color_to_str = {None: "", 0: "红心", 1: "方块", 2: "梅花", 3: "黑桃"}
-        return "Card: {} {} ".format(point_to_str[self.point], color_to_str[self.color])
+        return "Card: {} {} ".format(color_to_str[self.color], point_to_str[self.point])
 
 
 class Cards(MyWidget):
@@ -122,13 +141,15 @@ class Cards(MyWidget):
             Card(feature=card, owner=self)
 
     @property
-    def cards(self):
-        return self.subordinate
+    def cards(self):  # 一个Card对象的list
+        return self.attachment
 
-    def init_display(self):
-        self.appearance = Frame()
-        for index, card in enumerate(self.cards):
-            card.place(x=40 * index + 10, y=50)
+    def set_appr(self):
+        self.appearance = Frame(master=self.master)
+
+    def place_atta(self):
+        for card in self.cards:
+            card.pack()
 
     def __add__(self, other):
         assert isinstance(other, Cards)
@@ -146,14 +167,16 @@ class Desk(MyWidget):
         Cards(cards=(), owner=self)
 
     @property
-    def cards(self):
-        return self.subordinate[0]
+    def cards(self):  # 一个Cards对象
+        return self.attachment[0]
 
-    def init_display(self):
-        self.appearance = Frame()
+    def set_appr(self):
+        self.appearance = Frame(master=self.master)
+
+    def place_atta(self):
         self.cards.pack()
 
-    def recieve_cards(self, cards):
+    def receive_cards(self, cards):
         assert isinstance(cards, Cards)
         self.cards.__add__(cards)
 
@@ -167,15 +190,20 @@ class Info(MyWidget):
         self.name = name
         self.info = info
 
-    def init_display(self):
-        self.appearance = Frame()
+    def set_appr(self):
+        self.appearance = Frame(master=self.master)
         self.Label_01 = Label(master=self.appearance, text=self.name)
         self.Label_02 = Label(master=self.appearance, text=str(self.info))
         self.Label_01.pack()
         self.Label_02.pack()
 
+    def place_atta(self):
+        pass
+
     def __str__(self):
-        return "Info: " + str({"name": self.name}.update(self.info)) + " "
+        str_dict = {"name": self.name}
+        str_dict.update(self.info)
+        return "Info: " + str(str_dict) + " "
 
 
 class Player(MyWidget):
@@ -186,19 +214,21 @@ class Player(MyWidget):
         Cards(cards=(), owner=self)
 
     @property
-    def info(self):
-        return self.subordinate[0]
+    def info(self):  # 一个Info对象
+        return self.attachment[0]
 
     @property
-    def cards(self):
-        return self.subordinate[1]
+    def cards(self):  # 一个Cards对象
+        return self.attachment[1]
 
-    def init_display(self):
-        self.appearance = Frame(master=self.master)
+    def set_appr(self):
+        self.appearance = Frame(master=self.master, bg="red")
+
+    def place_atta(self):
         self.info.pack()
         self.cards.pack()
 
-    def recieve_cards(self, cards):
+    def receive_cards(self, cards):
         assert isinstance(cards, Cards)
         self.cards.__add__(cards)
 
@@ -213,15 +243,12 @@ class Me(Player):
     def __init__(self, *args, **kwargs):
         super(Me, self).__init__(*args, **kwargs)
 
-    def display(self):
-        pass
-
 
 class GameState(MyWidget):
     """GameState 开启游戏，记录游戏信息，可供gui渲染
     """
 
-    def __init__(self, me, player_info, display=True, *args, **kwargs):
+    def __init__(self, me, player_info, *args, **kwargs):
         """保存gamestate基础信息, 初始化一些组件
         """
         super(GameState, self).__init__(*args, **kwargs)
@@ -231,21 +258,25 @@ class GameState(MyWidget):
             if name != me:
                 Player(name=name, info=player_info[name], owner=self)
         Desk(owner=self)
+        self.me = me
+
+        Card(feature=(1, 1), owner=self)
 
     @property
-    def players(self):
-        return_dict = {}
-        for player in self.subordinate:
+    def player_dict(self):
+        player_dict = {}
+        for player in self.attachment:
             if isinstance(player, Player):
-                return_dict[player.name] = player
-        return return_dict
+                player_dict[player.name] = player
+        return player_dict
 
     def start_game(self, display):
         """开始游戏。
         """
         thread_obey = Thread(target=self.let_obey)
         thread_obey.start()
-        self.display = display
+        if display is True:
+            self.display()
         thread_obey.join()
 
     def let_obey(self):
@@ -254,7 +285,7 @@ class GameState(MyWidget):
         try:
             while True:
                 for info_list in list(CLIENT.msg_to_obey):
-                    player = self.players[info_list[2]]
+                    player = self.player_dict[info_list[2]]
                     player.obey(info_list)
                     # obey完action之后将该action踢出队列
                     LOCK.acquire()
@@ -264,12 +295,26 @@ class GameState(MyWidget):
         except Exception:  # TODO 异常处理
             return
 
-    def init_display(self):
+    def set_appr(self):
         """开启所有对象的display方法"""
-
         root = Tk()
         root.title("斗地主")
+        # root.geometry("1000x800")
         self.appearance = root
-        for obj in self.main_obj:
-            obj.display(master=root)
-        root.mainloop()
+
+    def place_atta(self):
+        self.attachment[0].config(bg="green")
+        self.attachment[0].place(relx=0.3, rely=0.5, relwidth=0.4, relheight=0.5)
+        self.attachment[1].config(bg="red")
+        self.attachment[1].place(relx=0, rely=0, relwidth=0.3, relheight=0.5)
+        self.attachment[2].config(bg="red")
+        self.attachment[2].place(relx=0.7, rely=0, relwidth=0.3, relheight=0.5)
+        self.attachment[3].config(bg="yellow")
+        self.attachment[3].place(relx=0.3, rely=0, relwidth=0.4, relheight=0.5)
+        cards = Cards(cards=((1, 2), (2, 2)), owner=self.attachment[3])
+        self.attachment[3].receive_cards(cards)
+        self.appearance.mainloop()
+
+
+gamestate = GameState("yangbc", CLIENT.player_info).start_game(display=True)
+
