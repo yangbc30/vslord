@@ -3,6 +3,9 @@ venv/
 LICENSE
 test.db
 test.py
+<<<<<<< HEAD
 private.py
+=======
+>>>>>>> cfe83d8417f75342b3cdcc65d4a9b84d2af70094
 __*
 ~*
