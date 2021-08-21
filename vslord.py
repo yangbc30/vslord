@@ -1,7 +1,9 @@
+import builtins
+
 from client import Client
 from threading import *
 from tkinter import *
-
+from utils import *
 # 测试环境
 LOCK = Lock()
 CLIENT = Client()
@@ -39,14 +41,17 @@ class MyWidget:
         return self._owner
 
     @owner.setter
-    def owner(self, value):
+    def owner(self, owner):
         if isinstance(self.owner, MyWidget):  # 如果前主人继承我的组件类（其中含有subordinate这个lst）把我在前主人的lst中删去
             self.owner.attachment.remove(self)
-        self._owner = value  # 修改owner
+            if self.owner._display is True:
+                self.owner.display()
+        self._owner = owner  # 修改owner
         if isinstance(self.owner, MyWidget):  # 重建从属关系，最后重新显示，显示的时候根据从属关系，建一个appr得到atta的master
             self.owner.attachment.append(self)
-            if self._display:
-                self.display()
+            if owner._display is True:
+                self.owner.display()  # self的owner发生变更，要让self的owner重新display，此时self的owner不会再创建它的appearance
+                                      # （确保self的owner的appearance不变）
         else:
             self.master = None
 
@@ -68,7 +73,8 @@ class MyWidget:
 
     def display(self):
         self._set_master()
-        self.set_appr()
+        if self.appearance is None:  #
+            self.set_appr()
         for widget in self.attachment:
             widget.display()
         self.place_atta()
@@ -101,9 +107,6 @@ class MyWidget:
         assert isinstance(self.appearance, Widget)
         self.appearance.config(*args, **kwargs)
 
-    def __add__(self, other):
-        pass
-
 
 class Timer(MyWidget):
 
@@ -117,15 +120,51 @@ class Card(MyWidget):
                  **kwargs):  # feature 为None显示扑克背面, (1, 0) 前一个代表大小, 后一个代表花色, 花色0: 红心, 1:方块, 2:梅花, 3:黑桃
         super(Card, self).__init__(*args, **kwargs)
         self.point, self.color = feature
+        self.selected = False
+
+    def select(self, event):
+        y_now = event.widget.winfo_y()
+        if self.selected is False:
+            event.widget.place(y=-20)
+            self.selected = True
+        else:
+            event.widget.place(y=0)
+            self.selected = False
 
     def set_appr(self):
-        img = PhotoImage(file="imgs/cards/{}.gif".format(self.point))
+        # 使用PIL
+        # img = Image.open(fp="imgs/cards/{}_{}.png".format(self.point, self.color))
+        # img = img.resize((50, 100))
+        # img = ImageTk.PhotoImage(image=img)
+
+
+        img = PhotoImage(file="imgs/cards/{}_{}.png".format(self.point, self.color))
         self.appearance = Label(master=self.master, image=img)
         self.appearance.image = img
+
+        self.appearance.bind("<Button-1>", self.select)
+
+        self.appearance.image = self.appearance.image.subsample(4, 4)
+        self.appearance.config(image=self.appearance.image)
         # self.appearance = Label(master=self.master, text="11 ")
 
     def place_atta(self):
         pass
+
+    def __eq__(self, other):
+        assert type(other) is Card
+        if self.point == other.point and self.color == other.color:
+            return True
+        else:
+            return False
+
+    def __lt__(self, other):
+        assert type(other) is Card
+        order_dict = {3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, 10:8, 11: 9, 12: 10, 13:11, 1: 12, 2: 13, 14: 14, 15: 15}
+        return order_dict[self.point] < order_dict[other.point]
+
+    def __gt__(self, other):
+        return other < self
 
     def __str__(self):
         point_to_str = {None: "未知", 1: "A", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10",
@@ -141,47 +180,72 @@ class Cards(MyWidget):
             Card(feature=card, owner=self)
 
     @property
-    def cards(self):  # 一个Card对象的list
+    def card_list(self):  # 一个Card对象的list
         return self.attachment
 
     def set_appr(self):
-        self.appearance = Frame(master=self.master)
+        self.appearance = Frame(master=self.master, bg="grey")
 
     def place_atta(self):
-        for card in self.cards:
-            card.pack()
+        x_border = 0.1
+        y_border = 0.1
+        num = len(self.card_list)
+        if num == 0:
+            step = 0
+            x_border = 0.4
+        else:
+            step = 0.8 / num
+        for index, card in builtins.enumerate(self.card_list):
+            card.place(relx=step*index + x_border, rely=y_border)
+
+    @staticmethod
+    def swap_card(a, b):
+        assert type(a) is Card and type(b) is Card
+        a.point, b.point = b.point, a.point
+        a.color, b.color = b.color, a.color
+        a.appearance.image, b.appearance.image = b.appearance.image, a.appearance.image
+        a.appearance.config(image=a.appearance.image)
+        b.appearance.config(image=b.appearance.image)
+
+
+
+    def sort_cards(self):
+        num = len(self.card_list)
+        for i in range(num-1):
+            for j in range(num-1-i):
+                if self.card_list[j] > self.card_list[j + 1]:
+                    Cards.swap_card(self.card_list[j], self.card_list[j + 1])
+        self.display()
+
 
     def __add__(self, other):
-        assert isinstance(other, Cards)
-        for card in other.cards:
-            card.owner = self
+        if type(other) is Card:
+            other.owner = self
+            self.sort_cards()
+        elif type(other) is Cards:
+            for card in list(other.card_list):
+                self.__add__(card)
+        else:
+            raise TypeError("只能Card或Cards")
+
+    def __sub__(self, other):
+        if type(other) is Card:
+            card_to_remove = other
+            for card in list(self.card_list):
+                if card == card_to_remove:
+                    card.owner = None
+                    del card, card_to_remove, other
+                    return
+
+        elif type(other) is  Cards:
+            for card_to_remove in other:
+                self.__sub__(card_to_remove)
+                del other
+        else:
+            raise TypeError("只能Card或Cards")
 
     def __str__(self):
-        return "Cards: " + str(self.cards) + " "
-
-
-class Desk(MyWidget):
-
-    def __init__(self, *args, **kwargs):
-        super(Desk, self).__init__(*args, **kwargs)
-        Cards(cards=(), owner=self)
-
-    @property
-    def cards(self):  # 一个Cards对象
-        return self.attachment[0]
-
-    def set_appr(self):
-        self.appearance = Frame(master=self.master)
-
-    def place_atta(self):
-        self.cards.pack()
-
-    def receive_cards(self, cards):
-        assert isinstance(cards, Cards)
-        self.cards.__add__(cards)
-
-    def __str__(self):
-        return "Desk: {} ".format(self.cards)
+        return "Cards: " + str([str(card) for card in self.card_list]) + " "
 
 
 class Info(MyWidget):
@@ -205,8 +269,48 @@ class Info(MyWidget):
         str_dict.update(self.info)
         return "Info: " + str(str_dict) + " "
 
+class ActionBar(MyWidget):
+    pass
 
-class Player(MyWidget):
+
+class Obeyer(MyWidget):
+    def obey(self, info_lst):
+        pass
+
+    @property
+    def cards(self):
+        return Cards()
+
+    def receive_cards(self, cards):
+        assert type(cards) is Card or type(cards) is Cards
+        self.cards.__add__(cards)
+
+    def drop_cards(self, cards):
+        assert type(cards) is Card or type(cards) is Cards
+        self.cards.__sub__(cards)
+
+
+class Desk(Obeyer):
+
+    def __init__(self, *args, **kwargs):
+        super(Desk, self).__init__(*args, **kwargs)
+        Cards(cards=(), owner=self)
+
+    @property
+    def cards(self):  # 一个Cards对象
+        return self.attachment[0]
+
+    def set_appr(self):
+        self.appearance = Frame(master=self.master)
+
+    def place_atta(self):
+        self.cards.place(x=0, y=100, relwidth=1, relheight=1)
+
+    def __str__(self):
+        return "Desk: {} ".format(self.cards)
+
+
+class Player(Obeyer):
     def __init__(self, name, info, *args, **kwargs):
         super(Player, self).__init__(*args, **kwargs)
         self.name = name
@@ -222,18 +326,11 @@ class Player(MyWidget):
         return self.attachment[1]
 
     def set_appr(self):
-        self.appearance = Frame(master=self.master, bg="red")
+        self.appearance = Frame(master=self.master)
 
     def place_atta(self):
         self.info.pack()
-        self.cards.pack()
-
-    def receive_cards(self, cards):
-        assert isinstance(cards, Cards)
-        self.cards.__add__(cards)
-
-    def obey(self, info_list):
-        pass
+        self.cards.place(x=0, y=100, relwidth=1, relheight=1)
 
     def __str__(self):
         return "Player: " + str(self.info, self.cards)
@@ -242,6 +339,14 @@ class Player(MyWidget):
 class Me(Player):
     def __init__(self, *args, **kwargs):
         super(Me, self).__init__(*args, **kwargs)
+
+    @property
+    def card_selected(self):
+        lst = []
+        for card in self.cards.card_list:
+            if card.selected is True:
+                lst.append(card)
+        return lst
 
 
 class GameState(MyWidget):
@@ -260,7 +365,7 @@ class GameState(MyWidget):
         Desk(owner=self)
         self.me = me
 
-        Card(feature=(1, 1), owner=self)
+        # Card(feature=(1, 1), owner=self)
 
     @property
     def player_dict(self):
@@ -277,7 +382,7 @@ class GameState(MyWidget):
         thread_obey.start()
         if display is True:
             self.display()
-        thread_obey.join()
+        # thread_obey.join()
 
     def let_obey(self):
         """强迫玩家做出某些action
@@ -299,7 +404,7 @@ class GameState(MyWidget):
         """开启所有对象的display方法"""
         root = Tk()
         root.title("斗地主")
-        # root.geometry("1000x800")
+        root.geometry("1000x800")
         self.appearance = root
 
     def place_atta(self):
@@ -311,8 +416,19 @@ class GameState(MyWidget):
         self.attachment[2].place(relx=0.7, rely=0, relwidth=0.3, relheight=0.5)
         self.attachment[3].config(bg="yellow")
         self.attachment[3].place(relx=0.3, rely=0, relwidth=0.4, relheight=0.5)
-        cards = Cards(cards=((1, 2), (2, 2)), owner=self.attachment[3])
-        self.attachment[3].receive_cards(cards)
+
+        # self.attachment[0].receive_cards(test_cards(18))
+        # self.attachment[1].receive_cards(test_cards(18))
+        self.attachment[2].receive_cards(test_cards(18))
+        self.attachment[3].receive_cards(Cards(cards=((1, 1), (2, 1), (3, 1))))
+
+        self.attachment[3].drop_cards(Card((1, 1)))
+
+        # self.attachment[0].cards.sort_cards()
+        # self.attachment[1].cards.sort_cards()
+        # self.attachment[2].cards.sort_cards()
+        # self.attachment[3].cards.sort_cards()
+
         self.appearance.mainloop()
 
 
