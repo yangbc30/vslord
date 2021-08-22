@@ -11,10 +11,24 @@
 
 class Action:
 
+    def __init__(self, gamestate, action_name, **kwargs):
+        self.gamestate = gamestate
+        self.name = action_name
+        self.parameters = kwargs
+        self.parse_action()
 
-    def __init__(self, player, gamestate):
-        Action.player = player
-        Action.gamestate = gamestate
+    def parse_action(self):
+        if self.name == "pass_round":
+            assert len(self.parameters) == 0
+            self.is_valid_pass_round()
+
+    def is_valid_pass_round(self):
+        if self.gamestate.current_player == self.gamestate.me:
+            return True
+
+    def request(self):
+        msg = list(self.name, )
+        self.gamestate.send()
 
     def is_valid(self):
         """
@@ -42,34 +56,3 @@ class Action:
         """
         pass
 
-class Vslord_chupai(Action):
-
-    def __init__(self, player, gamestate, cards):
-        self.player = player
-        self.gamestate = gamestate
-        self.cards = cards
-
-    def is_valid(self):
-        """
-        这个出牌是否合理
-        比较这个牌是不是比上家大，以及现在这个player可不可以出牌
-        """
-        pass
-
-    def effect(self):
-        """
-        出牌会改变gamestate中上家牌的值
-        """
-        self.gamestate.current_cards = self.cards
-
-    def display(self):
-        """
-        把出牌这个动作渲染出来
-        """
-        pass
-
-    def sync(self):
-        """
-        同步这个action
-        """
-        pass

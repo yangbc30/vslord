@@ -2,7 +2,6 @@
 
 import time
 import random
-import vslord
 GLOBAL_DEBUG = True
 
 
@@ -18,12 +17,20 @@ def print_by_time(msg):
     print(get_time() + str(msg))
 
 
+def timing(func):
+    def wrapper(*args, **kwargs):
+        t_begin = time.time()
+        ret = func(*args, **kwargs)
+        t_end = time.time()
+        print(func.__name__ + " consume " + str(t_end - t_begin))
+        return ret
+    return wrapper
+
+
 class NetworkError(Exception):
     def __init__(self, arg):
         self.arg = arg
 
-
-CARDS = tuple([(point, color) for point in range(1, 14) for color in range(4)] + [(14, None), (15, None)])
 
 # print(CARDS)
 
@@ -44,10 +51,10 @@ class CardDealer:
             return card
 
 
-def test_cards(n=10):
-    card_dealer = CardDealer(CARDS)
+def test_cards(card_set, n=10):
+    card_dealer = CardDealer(card_set)
     cards = []
     for i in range(n):
         cards.append(next(card_dealer))
-    return vslord.Cards(cards=tuple(cards))
+    return tuple(cards)
 

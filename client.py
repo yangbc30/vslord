@@ -1,6 +1,7 @@
 from socket import *
 from threading import *
-from tkinter import Frame, Button, Label, StringVar, Entry, messagebox, Tk
+from tkinter import *
+from tkinter import messagebox
 from utils import *
 import re
 
