@@ -27,6 +27,12 @@ def timing(func):
     return wrapper
 
 
+def print_hierarchy(w, depth=0):
+    print("  "*depth + w.winfo_class() + " 宽 " + str(w.winfo_width()) + " 高 " + str(w.winfo_height()) + " x（父） " + str(w.winfo_x()) + " y（父） " + str(w.winfo_y()))
+    for child in w.winfo_children():
+        print_hierarchy(child, depth+1)
+
+
 class NetworkError(Exception):
     def __init__(self, arg):
         self.arg = arg
