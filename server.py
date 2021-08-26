@@ -1,15 +1,12 @@
 from socket import *
 from threading import *
 import sqlite3
-import random
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
-
-import private
 from utils import *
-from private import *
-
+import private
+from vslord_server import *
 
 class Server:
     """
@@ -59,6 +56,12 @@ class Node(Thread):
     password = None
     mailbox = None
     code = None
+    points = 1000  # TODO
+
+    def player_info(self):
+        info_dict = {}
+        info_dict["points"] = self.points
+        return {self.name, info_dict}
 
     def __init__(self, conn, server):
         super().__init__()
@@ -156,6 +159,8 @@ class Node(Thread):
                 print_by_time("客户端断开连接" + str(error))
                 self.socket.close()
                 return
+            finally:
+                self.server.clients.pop(self.username)  # node结束时在clients dict中删除
 
             self.process_msg(info_list, len(info_list))
 
@@ -241,6 +246,18 @@ class Node(Thread):
             else:
                 msg = [action, "error", "wrong_code"]
                 self.send(msg)
+
+        if action == "start_game":
+            # TODO
+            assert len(self.server.clients) == 3
+            msg = [action, "ok"]
+            self.send(msg)
+
+
+
+            gamestate = GameState(self.username, player_info)
+
+
 
 
 if __name__ == '__main__':

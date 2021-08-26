@@ -1,4 +1,5 @@
 venv/
+trash/
 .idea
 LICENSE
 test.db

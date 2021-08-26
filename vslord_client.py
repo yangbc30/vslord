@@ -1,9 +1,11 @@
 import builtins
-from vslord_actions import *
 from threading import *
 from tkinter import *
 from tkinter import ttk
+
+from rule import is_valid
 from utils import *
+from collections import OrderedDict
 import ctypes
 
 
@@ -58,7 +60,7 @@ class MyWidget:
         assert value is True or value is False, "_displaying不支持的value"
         self._displaying = value
 
-    @timing
+    # @timing
     def display(self):
         if self.appearance is None:  #
             self.set_appr()
@@ -106,6 +108,9 @@ class Timer(MyWidget):
 
 
 class Card(MyWidget):
+    order_dict = {None: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, 10: 8, 11: 9, 12: 10, 13: 11, 1: 12, 2: 13,
+                  14: 14,
+                  15: 15}
 
     def __init__(self, feature=(None, None), *args,
                  **kwargs):  # feature 为None显示扑克背面, (1, 0) 前一个代表大小, 后一个代表花色, 花色0: 红心, 1:方块, 2:梅花, 3:黑桃
@@ -116,6 +121,10 @@ class Card(MyWidget):
 
     @property
     def value(self):
+        return self.order_dict[self.point]
+
+    @property
+    def mate_info(self):
         return self.point, self.color
 
     def select(self, event):
@@ -130,7 +139,7 @@ class Card(MyWidget):
         self.appearance = ttk.Label(master=self.master)
         if self.owner.can_select:
             self.appearance.bind("<Button-1>", self.select)
-            print(1)
+            # print(1)
 
     @property
     def img(self):
@@ -160,10 +169,8 @@ class Card(MyWidget):
 
     def __lt__(self, other):
         assert type(other) is Card
-        order_dict = {None: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, 10: 8, 11: 9, 12: 10, 13: 11, 1: 12, 2: 13,
-                      14: 14,
-                      15: 15}
-        return order_dict[self.point] < order_dict[other.point]
+
+        return self.order_dict[self.point] < self.order_dict[other.point]
 
     def __gt__(self, other):
         return other < self
@@ -176,19 +183,22 @@ class Card(MyWidget):
 
 
 class Cards(MyWidget):
+    class_name = "Cards"
+
     def __init__(self, cards=(), can_select=False, anonymous=True, *args, **kwargs):  # cards = ((1, 0), (2, 0))
         super(Cards, self).__init__(*args, **kwargs)
         self.can_select = can_select
         self.anonymous = anonymous
-        print(self.can_select)
+        # print(self.can_select)
         for card in cards:
             Card(feature=card, owner=self)
+        self.sort_cards()
 
     @property
-    def value(self):
+    def mate_info(self):  # 生成该牌堆的元数据
         lst = []
         for card in self.card_list:
-            lst.append(card.value)
+            lst.append(card.mate_info)
         return tuple(lst)
 
     @property
@@ -201,8 +211,8 @@ class Cards(MyWidget):
         lst = []
         for card in self.card_list:
             if card.selected is True:
-                lst.append(card.value)
-        return Cards(tuple(lst))
+                lst.append(card.mate_info)
+        return ValidCards(tuple(lst))
 
     def set_appr(self):
         self.appearance = ttk.Frame(master=self.master)
@@ -229,7 +239,7 @@ class Cards(MyWidget):
         a.selected, b.selected = b.selected, a.selected
         a.to_set_img, b.to_set_img = True, True
 
-    @timing
+    # @timing
     def sort_cards(self):  # 不参与display
         num = len(self.card_list)
         for i in range(num - 1):
@@ -238,7 +248,7 @@ class Cards(MyWidget):
                     Cards.swap_card(self.card_list[j], self.card_list[j + 1])
 
     def __add__(self, other):
-        assert type(other) is Cards, "只能用Cards加Cards"
+        assert isinstance(other, Cards), "只能用Cards加Cards"
         for card in list(other.card_list):
             card.owner = self
         if self.anonymous is False:
@@ -247,7 +257,7 @@ class Cards(MyWidget):
             self.display()
 
     def __sub__(self, other):
-        assert type(other) is Cards, "只能用Cards加Cards"
+        assert isinstance(other, Cards), "只能用Cards加Cards"
         for card in list(self.card_list):
             if card in other.card_list:
                 card.owner = "Trash"
@@ -255,7 +265,63 @@ class Cards(MyWidget):
             self.display()
 
     def __str__(self):
-        return "Cards: " + str([str(card) for card in self.card_list]) + " "
+        return self.class_name + ": " + str([str(card) for card in self.card_list]) + " "
+
+
+class ValidCards(Cards):
+    class_name = "ValidCards"
+
+    def __init__(self, *args, **kwargs):
+        super(ValidCards, self).__init__(anonymous=False, *args, **kwargs)
+        self.valid = False
+        self.pattern = None
+        self.value = None
+        self.validate()  # 创建时判断是否合法（不比大小）
+
+    def validate(self, current_cards=None):
+        is_valid(self, current_cards)
+        print("是否合法", self.valid, self.pattern, self.value)
+
+    @property
+    def feature_dict(self):  # 这个牌堆的特征，key=value，mate_info=times，按照time优先，point其次，由大到小
+        dict_1 = {}
+        for card in self.card_list:
+            if card.value in dict_1:
+                dict_1[card.value] += 1
+            else:
+                dict_1[card.value] = 1
+
+        dict_2 = OrderedDict()
+
+        for i in range(len(dict_1)):
+            curr_value = 0
+            curr_times = 0
+            for value in dict_1:
+                if dict_1[value] > curr_times:
+                    curr_times = dict_1[value]
+                    curr_value = value
+                elif dict_1[value] == curr_times:
+                    if value > curr_value:
+                        curr_value = value
+            dict_1.pop(curr_value)
+            dict_2[curr_value] = curr_times
+
+        return dict_2
+
+    @property
+    def feature_str(self):  # 这个牌堆的特征“3322”
+        s = ""
+        for value in list(self.feature_dict.values()):
+            s += str(value)
+        return s
+
+    def __add__(self, other):
+        super(ValidCards, self).__add__(other)
+        self.validate()
+
+    def __sub__(self, other):
+        super(ValidCards, self).__sub__(other)
+        self.validate()
 
 
 class Info(MyWidget):
@@ -289,11 +355,9 @@ class Obeyer(MyWidget):
         return Cards()
 
     def receive_cards(self, cards):
-        assert type(cards) is Card or type(cards) is Cards
         self.cards.__add__(cards)
 
     def remove_cards(self, cards):
-        assert type(cards) is Card or type(cards) is Cards
         self.cards.__sub__(cards)
 
 
@@ -301,7 +365,16 @@ class Desk(Obeyer):
 
     def __init__(self, *args, **kwargs):
         super(Desk, self).__init__(*args, **kwargs)
-        Cards(cards=(), owner=self, anonymous=False)
+        ValidCards(cards=(), owner=self)
+
+    @property
+    def current_cards(self):
+        return self.attachment[0]
+
+    @current_cards.setter
+    def current_cards(self, value):
+        self.remove_cards(self.current_cards)
+        self.receive_cards(value)
 
     @property
     def cards(self):  # 一个Cards对象
@@ -382,9 +455,13 @@ class Me(Player):
         # action = Action(self.owner, action_name)
 
     def drop_cards_request(self):
-        print("出牌", self.selected_cards)
+        cards = self.selected_cards  # ValidCards类型
+        cards.validate(self.owner.current_cards)
+        print("上家牌：", str(self.owner.current_cards))
+        print("出牌", str(cards))
 
-
+        if cards.valid:
+            self.owner.current_cards = cards
 
     def drop_cards_implement(self):
         pass
@@ -406,12 +483,25 @@ class GameState(MyWidget):
         Desk(owner=self)
         self.me = me
         self.current_player = current_player
+        self._current_cards = None
         self.client = client
 
     def send(self, msg):
         pass
 
         # Card(feature=(1, 1), owner=self)
+
+    @property
+    def desk(self):
+        return self.attachment[3]
+
+    @property
+    def current_cards(self):
+        return self.desk.current_cards
+
+    @current_cards.setter
+    def current_cards(self, value):
+        self.desk.current_cards = value
 
     @property
     def player_dict(self):
@@ -457,7 +547,7 @@ class GameState(MyWidget):
         self.root.geometry("1000x800")
         self.appearance = self.root
 
-    @timing
+    # @timing
     def place_atta(self):
         # self.attachment[0].config(bg="green")
         self.attachment[0].place(relx=0.3, rely=0.5, relwidth=0.4, relheight=0.5)
@@ -467,12 +557,12 @@ class GameState(MyWidget):
         self.attachment[2].place(relx=0.7, rely=0, relwidth=0.3, relheight=0.5)
         # self.attachment[3].config(bg="yellow")
         self.attachment[3].place(relx=0.3, rely=0, relwidth=0.4, relheight=0.5)
-        print(self.attachment[0].cards.appearance)
+        # print(self.attachment[0].cards.appearance)
 
-        self.attachment[0].receive_cards(Cards(test_cards(CARDS, 18)))
-        self.attachment[1].receive_cards(Cards(test_cards(CARDS, 18)))
-        self.attachment[2].receive_cards(Cards(test_cards(CARDS, 18)))
-        self.attachment[3].receive_cards(Cards(cards=((1, 1), (2, 1), (3, 1))))
+        self.attachment[0].receive_cards(Cards(test_cards(CARDS, 25)))
+        # self.attachment[1].receive_cards(Cards(test_cards(CARDS, 18)))
+        # self.attachment[2].receive_cards(Cards(test_cards(CARDS, 54)))
+        self.desk.receive_cards(Cards(cards=((1, 1),)))
 
         self.attachment[3].remove_cards(Cards(((1, 1),)))  # test drop cards or card
 
@@ -480,11 +570,10 @@ class GameState(MyWidget):
         global CARDS
         CARDS = tuple([(point, color) for point in range(1, 14) for color in range(4)] + [(14, None), (15, None)])
         global CARD_IMG
-        CARD_IMG= {"{}_{}".format(point, color): PhotoImage(file="imgs/cards/{}_{}.png".format(point, color)) for
+        CARD_IMG = {"{}_{}".format(point, color): PhotoImage(file="imgs/cards/{}_{}.png".format(point, color)) for
                     point, color in list(CARDS) + [(None, None)]}
         self.display()
         self.appearance.mainloop()
-
 
 
 if __name__ == "__main__":
@@ -497,5 +586,5 @@ if __name__ == "__main__":
         "lvyaqiao": {"points": 1000},
     }
     root = Tk()
-    gamestate = GameState("yangbc", CLIENT.player_info, current_player="yangbc")
+    gamestate = GameState("yangbc", CLIENT.player_info, current_player="yangbc", client=CLIENT)
     gamestate.start_game(display=True, master=root)

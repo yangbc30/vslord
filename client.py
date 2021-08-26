@@ -1,10 +1,12 @@
 from socket import *
-from tkinter import *
-from tkinter import messagebox, ttk
+# from tkinter import *
+from tkinter import messagebox
+# from tkinter import ttk
 from ctypes import windll
 from utils import *
 import re
 import threading
+from vslord_client import *
 
 
 class CommunicateThread(threading.Thread):
@@ -141,6 +143,11 @@ class Client:
         self.player_info = {}  # 记录所有玩家信息 {"yuanye": {...}}
         self.recv_msg = {}  # 保存recv方法得到的消息，以action作为关键字 {"login": ["login", "error", "user_not_found"]}
         self.msg_to_obey = []  # 保存等待遵守的action [["give_cards_to", "force", "yangbc", "Cards"], ...]
+        self.roomate_info = {}  # 保存当前房间所有人的信息 {
+                                #     "yangbc": {"points": 1000},
+                                #     "yuanye": {"points": 1000},
+                                #     "lvyaqiao": {"points": 1000},
+                                # }
 
         self.LOCK = threading.Lock()  # 线程锁 全局变量 多线程修改数据用 TODO 加入线程锁
         self.connect(server_addr=server_addr, try_time=5)
@@ -347,6 +354,22 @@ class Login(ttk.Frame):
                 self.client.username = username  # 登录 成功 后才能修改Client中的值
                 self.client.password = password
                 # TODO 进入游戏大厅
+
+                def test_env():
+                    action = "start_game"
+                    msg = [action]
+                    self.client.send(msg)
+                    info_list = self.client.wait_msg(action=action)
+                    self.client.roomate_info = {
+                        "111111": {"points": 1000},
+                        "yuanye": {"points": 1000},
+                        "lvyaqiao": {"points": 1000},
+                    }
+                    if info_list[1] == "ok":
+                        print(self.client.username, " Game start")
+                        GameState(self.client.username, self.client.roomate_info, self.client.username, client=self.client).start_game(display=True, master=self.master)
+
+                test_env()
             else:
                 if GLOBAL_DEBUG is True:
                     print_by_time(info_list[2])
